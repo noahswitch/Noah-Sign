@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Noah-Sign — PDF Signing Platform</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg-0:#080b12;--bg-1:#0d1117;--bg-2:#111827;--bg-3:#1a2235;--bg-card:rgba(255,255,255,0.04);--border:rgba(255,255,255,0.08);--border-hover:rgba(99,179,237,0.35);--accent:#4f8ef7;--accent-glow:rgba(79,142,247,0.18);--accent2:#a78bfa;--text-primary:#f0f4ff;--text-secondary:#8899b4;--text-muted:#4a5568;--success:#34d399;--danger:#f87171;--radius:12px;--radius-lg:18px;--sidebar-w:240px;--right-w:220px;--navbar-h:56px;--font-head:'Syne',sans-serif;--font-body:'DM Sans',sans-serif}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg-0);color:var(--text-primary);font-family:var(--font-body);font-size:14px}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:99px}
+button{cursor:pointer;border:none;background:none;color:inherit;font-family:inherit}
+input,textarea,select{font-family:inherit;color:inherit}
+#navbar{position:fixed;top:0;left:0;right:0;height:var(--navbar-h);background:rgba(8,11,18,0.92);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:10px;z-index:100}
+.logo{font-family:var(--font-head);font-weight:800;font-size:18px;letter-spacing:-0.5px;background:linear-gradient(135deg,#4f8ef7,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;flex-shrink:0;margin-right:6px}
+.nav-spacer{flex:1}
+.nav-btn{display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:8px;font-size:12px;font-weight:500;transition:all .2s;border:1px solid var(--border);white-space:nowrap}
+.nav-btn:hover{background:var(--bg-card);border-color:var(--border-hover)}
+.nav-btn.primary{background:linear-gradient(135deg,#4f8ef7,#6d72f7);border:none;color:#fff}
+.nav-btn.primary:hover{opacity:.9;transform:translateY(-1px)}
+.nav-btn svg{width:14px;height:14px;flex-shrink:0}
+#page-info{font-size:11px;color:var(--text-secondary);background:var(--bg-card);border:1px solid var(--border);padding:4px 10px;border-radius:6px;white-space:nowrap}
+.zoom-ctrl{display:flex;align-items:center;gap:2px}
+.zoom-ctrl button{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);font-size:15px;color:var(--text-secondary);transition:all .15s}
+.zoom-ctrl button:hover{background:var(--bg-card);color:var(--text-primary)}
+#zoom-level{font-size:11px;color:var(--text-secondary);min-width:34px;text-align:center}
+#layout{position:fixed;top:var(--navbar-h);left:0;right:0;bottom:0;display:flex}
+#left-sidebar{width:var(--sidebar-w);background:var(--bg-1);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.sidebar-section{padding:10px}
+.sidebar-section-title{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px}
+.tool-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.tool-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 5px;border-radius:10px;border:1px solid var(--border);background:var(--bg-card);font-size:11px;color:var(--text-secondary);transition:all .2s;text-align:center}
+.tool-btn:hover,.tool-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-glow)}
+.tool-btn svg{width:17px;height:17px}
+.sidebar-divider{height:1px;background:var(--border);margin:2px 10px}
+#thumbnail-container{flex:1;overflow-y:auto;padding:8px}
+.thumb-item{position:relative;margin-bottom:6px;border-radius:7px;overflow:hidden;border:2px solid transparent;cursor:pointer;transition:all .2s}
+.thumb-item.active{border-color:var(--accent)}
+.thumb-item:hover{border-color:rgba(79,142,247,.4)}
+.thumb-item canvas{display:block;width:100%}
+.thumb-num{position:absolute;bottom:3px;right:4px;font-size:9px;background:rgba(0,0,0,.7);color:#fff;padding:1px 4px;border-radius:3px}
+#workspace{flex:1;overflow:auto;background:var(--bg-0);position:relative;display:flex;flex-direction:column;align-items:center;padding:20px}
+#canvas-stack{position:relative;display:inline-block}
+#pdf-canvas{display:block;box-shadow:0 0 0 1px rgba(255,255,255,.05),0 20px 60px rgba(0,0,0,.6)}
+#overlay-canvas{position:absolute;top:0;left:0;pointer-events:none}
+#elements-layer{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+.element-node{position:absolute;cursor:move;user-select:none;pointer-events:auto}
+.element-node.selected .elem-inner{outline:2px solid var(--accent);outline-offset:2px}
+.elem-inner{position:relative}
+.elem-handle{position:absolute;width:10px;height:10px;background:var(--accent);border-radius:50%;border:2px solid #fff;display:none;z-index:10}
+.selected .elem-handle{display:block}
+.elem-handle.br{bottom:-5px;right:-5px;cursor:se-resize}
+.elem-handle.rot{top:-22px;left:50%;transform:translateX(-50%);cursor:grab;font-size:10px;display:none;align-items:center;justify-content:center;border-radius:50%;width:12px;height:12px}
+.selected .elem-handle.rot{display:flex}
+.elem-delete{position:absolute;top:-22px;right:-4px;width:18px;height:18px;background:var(--danger);border-radius:50%;display:none;align-items:center;justify-content:center;font-size:13px;cursor:pointer;color:#fff;line-height:1;z-index:10}
+.selected .elem-delete{display:flex}
+#upload-prompt{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:50px 60px;text-align:center;border:2px dashed var(--border);border-radius:var(--radius-lg);min-width:380px;transition:all .3s;cursor:pointer}
+#upload-prompt:hover,#upload-prompt.drag-over{border-color:var(--accent);background:var(--accent-glow)}
+#upload-prompt svg{width:44px;height:44px;color:var(--text-muted)}
+#upload-prompt h2{font-family:var(--font-head);font-size:20px;font-weight:700}
+#upload-prompt p{color:var(--text-secondary);font-size:12px;line-height:1.6}
+#file-input,#img-input{display:none}
+.upload-cta{padding:10px 26px;background:linear-gradient(135deg,#4f8ef7,#6d72f7);border-radius:9px;font-weight:600;font-size:13px;color:#fff}
+#right-sidebar{width:var(--right-w);background:var(--bg-1);border-left:1px solid var(--border);overflow-y:auto;padding:10px;flex-shrink:0}
+.right-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:8px}
+.prop-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;gap:5px}
+.prop-label{font-size:11px;color:var(--text-secondary);flex-shrink:0}
+.prop-input{background:var(--bg-3);border:1px solid var(--border);border-radius:6px;padding:3px 7px;font-size:11px;color:var(--text-primary);width:75px;transition:border .2s}
+.prop-input:focus{outline:none;border-color:var(--accent)}
+.font-select{width:100%;background:var(--bg-3);border:1px solid var(--border);border-radius:6px;padding:4px 7px;font-size:11px;color:var(--text-primary)}
+.btn-sm{padding:5px 10px;border-radius:6px;font-size:11px;font-weight:500;border:1px solid var(--border);background:var(--bg-card);transition:all .15s}
+.btn-sm:hover{background:var(--bg-3);border-color:var(--border-hover)}
+.btn-sm.danger{border-color:rgba(248,113,113,.3);color:var(--danger)}
+.btn-sm.danger:hover{background:rgba(248,113,113,.1)}
+.btn-row{display:flex;gap:5px;flex-wrap:wrap}
+.empty-right{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;text-align:center;color:var(--text-muted)}
+.empty-right svg{width:28px;height:28px;opacity:.4}
+.empty-right p{font-size:11px;line-height:1.5}
+#sig-modal,#text-modal{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.75);backdrop-filter:blur(8px)}
+#sig-modal.open,#text-modal.open{display:flex;animation:fadeIn .2s ease}
+@keyframes fadeIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.modal-card{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:22px;width:490px;max-width:95vw}
+.modal-title{font-family:var(--font-head);font-size:17px;font-weight:700;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+.modal-close{width:26px;height:26px;border-radius:6px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:17px;color:var(--text-secondary);cursor:pointer}
+.modal-close:hover{background:var(--bg-3);color:var(--text-primary)}
+.tab-row{display:flex;gap:3px;margin-bottom:14px;background:var(--bg-3);padding:3px;border-radius:8px}
+.tab{flex:1;padding:6px;border-radius:6px;font-size:12px;font-weight:500;color:var(--text-secondary);transition:all .2s;text-align:center;cursor:pointer}
+.tab.active{background:var(--accent);color:#fff}
+#sig-canvas-wrap{background:var(--bg-3);border-radius:9px;overflow:hidden;border:1px solid var(--border)}
+#sig-canvas{display:block;touch-action:none;cursor:crosshair}
+#sig-type-preview{height:75px;display:flex;align-items:center;justify-content:center;background:var(--bg-3);border-radius:9px;border:1px solid var(--border);margin-bottom:9px;font-size:34px;overflow:hidden;padding:0 12px}
+.font-pills{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px}
+.font-pill{padding:4px 11px;border-radius:20px;border:1px solid var(--border);font-size:11px;cursor:pointer;transition:all .15s}
+.font-pill.active{border-color:var(--accent);color:var(--accent);background:var(--accent-glow)}
+.modal-actions{display:flex;gap:7px;margin-top:13px;justify-content:flex-end}
+.modal-actions button{padding:7px 16px;border-radius:8px;font-size:12px;font-weight:500;border:1px solid var(--border);transition:all .2s;cursor:pointer}
+.modal-actions .confirm{background:linear-gradient(135deg,#4f8ef7,#6d72f7);border:none;color:#fff}
+.modal-actions .confirm:hover{opacity:.9}
+.modal-actions .cancel{background:var(--bg-card);color:var(--text-primary)}
+.modal-actions .cancel:hover{background:var(--bg-3)}
+#typed-sig-input{width:100%;background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:9px;font-size:13px;color:var(--text-primary);margin-bottom:9px}
+#typed-sig-input:focus{outline:none;border-color:var(--accent)}
+#toast-container{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:999;display:flex;flex-direction:column;gap:7px;pointer-events:none}
+.toast{padding:9px 18px;border-radius:9px;font-size:12px;font-weight:500;border:1px solid var(--border);backdrop-filter:blur(12px);animation:toastIn .25s ease;pointer-events:none;white-space:nowrap}
+.toast.success{background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.3);color:#34d399}
+.toast.error{background:rgba(248,113,113,.15);border-color:rgba(248,113,113,.3);color:#f87171}
+.toast.info{background:rgba(79,142,247,.15);border-color:rgba(79,142,247,.3);color:#4f8ef7}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+#loading-overlay{position:fixed;inset:0;z-index:300;background:var(--bg-0);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .4s}
+#loading-overlay.hidden{opacity:0;pointer-events:none}
+.spinner{width:32px;height:32px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.progress-bar{width:180px;height:2px;background:var(--bg-3);border-radius:99px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,#4f8ef7,#a78bfa);border-radius:99px;transition:width .3s;width:0%}
+#load-text{font-size:12px;color:var(--text-secondary)}
+.logo-load{font-family:var(--font-head);font-weight:800;font-size:24px;background:linear-gradient(135deg,#4f8ef7,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+#grid-svg{position:absolute;top:0;left:0;pointer-events:none;display:none}
+input[type=range]{-webkit-appearance:none;width:100%;height:3px;background:var(--bg-3);border-radius:99px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;background:var(--accent);border-radius:50%;cursor:pointer}
+input[type=color]{-webkit-appearance:none;width:26px;height:26px;border:none;background:none;cursor:pointer;padding:0}
+input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+input[type=color]::-webkit-color-swatch{border-radius:5px;border:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="logo-load">Noah-Sign</div>
+  <div class="spinner"></div>
+  <div class="progress-bar"><div class="progress-fill" id="prog"></div></div>
+  <div id="load-text">Initializing…</div>
+</div>
+
+<nav id="navbar">
+  <div class="logo">Noah-Sign</div>
+  <div class="zoom-ctrl">
+    <button onclick="changeZoom(-0.15)" title="Zoom out">−</button>
+    <span id="zoom-level">100%</span>
+    <button onclick="changeZoom(0.15)" title="Zoom in">+</button>
+    <button onclick="fitPage()" style="font-size:10px;padding:0 6px;width:auto;">Fit</button>
+  </div>
+  <span id="page-info">Page — / —</span>
+  <button class="nav-btn" onclick="prevPage()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+  <button class="nav-btn" onclick="nextPage()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+  </button>
+  <div class="nav-spacer"></div>
+  <button class="nav-btn" onclick="toggleGrid()" id="grid-btn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    Grid
+  </button>
+  <button class="nav-btn" onclick="undoAction()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10h10c3.866 0 7 3.134 7 7s-3.134 7-7 7H9"/><path d="M3 10l4-4M3 10l4 4"/></svg>
+    Undo
+  </button>
+  <label class="nav-btn" for="file-input" style="cursor:pointer">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    Upload PDF
+  </label>
+  <button class="nav-btn primary" onclick="exportPDF()" id="export-btn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Export PDF
+  </button>
+  <input type="file" id="file-input" accept=".pdf" onchange="loadPDF(this)">
+  <input type="file" id="img-input" accept="image/*" onchange="addImageFromFile(this)">
+</nav>
+
+<div id="layout">
+  <div id="left-sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Tools</div>
+      <div class="tool-grid">
+        <button class="tool-btn" onclick="openSignatureModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 18c2-4 4-8 6-8s3 4 5 4 4-6 6-6"/><line x1="3" y1="21" x2="21" y2="21"/></svg>
+          Signature
+        </button>
+        <button class="tool-btn" onclick="openTextModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+          Text
+        </button>
+        <button class="tool-btn" onclick="document.getElementById('img-input').click()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          Image
+        </button>
+        <button class="tool-btn" onclick="addDateElement()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Date
+        </button>
+        <button class="tool-btn" onclick="addInitialsElement()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h8m-8 5h16"/></svg>
+          Initials
+        </button>
+        <button class="tool-btn" onclick="clearAllElements()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          Clear
+        </button>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section" style="padding-bottom:4px">
+      <div class="sidebar-section-title">Pages</div>
+    </div>
+    <div id="thumbnail-container"></div>
+  </div>
+
+  <div id="workspace" ondragover="event.preventDefault()" ondrop="handleDrop(event)">
+    <div id="upload-prompt" onclick="document.getElementById('file-input').click()" ondragover="this.classList.add('drag-over');event.preventDefault()" ondragleave="this.classList.remove('drag-over')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+      <h2>Upload Your PDF</h2>
+      <p>Drag & drop or click to select a PDF file<br>Supports multi-page documents</p>
+      <div class="upload-cta">Choose File</div>
+    </div>
+    <div id="canvas-stack" style="display:none">
+      <canvas id="pdf-canvas"></canvas>
+      <canvas id="overlay-canvas"></canvas>
+      <div id="elements-layer"></div>
+      <svg id="grid-svg"></svg>
+    </div>
+  </div>
+
+  <div id="right-sidebar">
+    <div id="right-no-selection">
+      <div class="right-title">Properties</div>
+      <div class="empty-right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <p>Select an element to edit its properties</p>
+      </div>
+      <div class="right-title" style="margin-top:14px">Document</div>
+      <div class="prop-row"><span class="prop-label">Pages</span><span id="doc-pages" style="font-size:11px;color:var(--text-secondary)">—</span></div>
+      <div class="prop-row"><span class="prop-label">Elements</span><span id="doc-elements" style="font-size:11px;color:var(--text-secondary)">0</span></div>
+    </div>
+    <div id="right-selection" style="display:none">
+      <div class="right-title">Element</div>
+      <div class="prop-row"><span class="prop-label">X</span><input class="prop-input" id="prop-x" type="number" onchange="updateSelectedProp('x',+this.value)"></div>
+      <div class="prop-row"><span class="prop-label">Y</span><input class="prop-input" id="prop-y" type="number" onchange="updateSelectedProp('y',+this.value)"></div>
+      <div class="prop-row"><span class="prop-label">Width</span><input class="prop-input" id="prop-w" type="number" onchange="updateSelectedProp('w',+this.value)"></div>
+      <div class="prop-row"><span class="prop-label">Rotation</span><input class="prop-input" id="prop-rot" type="number" onchange="updateSelectedProp('rot',+this.value)"></div>
+      <div id="text-props" style="display:none;margin-top:10px">
+        <div class="right-title">Typography</div>
+        <div class="prop-row"><span class="prop-label">Size</span><input class="prop-input" id="prop-size" type="number" min="8" max="120" onchange="updateSelectedProp('fontSize',+this.value)"></div>
+        <div class="prop-row"><span class="prop-label">Color</span><input type="color" id="prop-color" onchange="updateSelectedProp('color',this.value)"></div>
+        <div class="prop-row"><span class="prop-label">Font</span></div>
+        <select class="font-select" id="prop-font" onchange="updateSelectedProp('fontFamily',this.value)">
+          <option value="DM Sans">DM Sans</option>
+          <option value="Syne">Syne</option>
+          <option value="Georgia">Georgia</option>
+          <option value="Courier New">Courier New</option>
+          <option value="Arial">Arial</option>
+          <option value="cursive">Cursive</option>
+        </select>
+        <div class="btn-row" style="margin-top:7px">
+          <button class="btn-sm" id="prop-bold" onclick="toggleTextStyle('bold')">Bold</button>
+          <button class="btn-sm" id="prop-italic" onclick="toggleTextStyle('italic')">Italic</button>
+        </div>
+      </div>
+      <div style="margin-top:11px">
+        <div class="btn-row">
+          <button class="btn-sm" onclick="duplicateSelected()">Duplicate</button>
+          <button class="btn-sm danger" onclick="deleteSelected()">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="sig-modal">
+  <div class="modal-card">
+    <div class="modal-title">
+      Add Signature
+      <button class="modal-close" onclick="closeSigModal()">×</button>
+    </div>
+    <div class="tab-row">
+      <div class="tab active" id="tab-draw" onclick="switchSigTab('draw')">Draw</div>
+      <div class="tab" id="tab-type" onclick="switchSigTab('type')">Type</div>
+    </div>
+    <div id="draw-panel">
+      <div id="sig-canvas-wrap"><canvas id="sig-canvas" width="446" height="155"></canvas></div>
+      <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
+        <button class="btn-sm" onclick="undoSigStroke()">Undo</button>
+        <button class="btn-sm" onclick="clearSigCanvas()">Clear</button>
+        <span style="font-size:11px;color:var(--text-secondary)">Color</span>
+        <input type="color" id="sig-color" value="#c8d8f0" onchange="drawSigStrokes()">
+        <span style="font-size:11px;color:var(--text-secondary)">Width</span>
+        <input class="prop-input" type="number" id="sig-width" value="2.5" min="1" max="10" step="0.5" style="width:50px">
+      </div>
+    </div>
+    <div id="type-panel" style="display:none">
+      <input id="typed-sig-input" placeholder="Type your signature…" oninput="updateTypedPreview()">
+      <div id="sig-type-preview" style="font-family:cursive;color:#c8d8f0">Your Signature</div>
+      <div class="font-pills">
+        <div class="font-pill active" data-font="cursive" onclick="selectSigFont(this,'cursive')">Script</div>
+        <div class="font-pill" data-font="Syne" onclick="selectSigFont(this,'Syne')">Modern</div>
+        <div class="font-pill" data-font="Georgia" onclick="selectSigFont(this,'Georgia')">Serif</div>
+        <div class="font-pill" data-font="Courier New" onclick="selectSigFont(this,'Courier New')">Mono</div>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">Color</span>
+        <input type="color" id="type-sig-color" value="#c8d8f0" onchange="updateTypedPreview()">
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">Size</span>
+        <input class="prop-input" id="type-sig-size" type="number" value="36" min="12" max="80">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="cancel" onclick="closeSigModal()">Cancel</button>
+      <button class="confirm" onclick="addSignatureToPage()">Add to Page</button>
+    </div>
+  </div>
+</div>
+
+<div id="text-modal">
+  <div class="modal-card" style="width:410px">
+    <div class="modal-title">
+      Add Text
+      <button class="modal-close" onclick="closeTextModal()">×</button>
+    </div>
+    <textarea id="text-modal-input" rows="4" placeholder="Enter your text…" style="width:100%;background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:9px;font-size:13px;color:var(--text-primary);resize:vertical;margin-bottom:11px"></textarea>
+    <div class="prop-row"><span class="prop-label">Font Size</span><input class="prop-input" id="text-modal-size" type="number" value="16" min="8" max="120"></div>
+    <div class="prop-row"><span class="prop-label">Color</span><input type="color" id="text-modal-color" value="#f0f4ff"></div>
+    <div class="prop-row">
+      <span class="prop-label">Font</span>
+      <select class="font-select" id="text-modal-font" style="width:auto;flex:1">
+        <option value="DM Sans">DM Sans</option>
+        <option value="Syne">Syne</option>
+        <option value="Georgia">Georgia</option>
+        <option value="Courier New">Courier New</option>
+        <option value="cursive">Cursive</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="cancel" onclick="closeTextModal()">Cancel</button>
+      <button class="confirm" onclick="addTextElement()">Add Text</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+const S={pdfDoc:null,pdfBytes:null,pdfArrayBuffer:null,currentPage:1,totalPages:0,zoom:1,elements:{},selectedId:null,selectedPage:null,undoStack:[],gridVisible:false,sigTab:'draw',sigFont:'cursive'};
+let elemId=0,sigCtx,sigDrawing=false,sigStrokes=[],currentStroke=[];
+
+window.addEventListener('DOMContentLoaded',()=>{
+  const lo=document.getElementById('loading-overlay');
+  simulateLoad();
+  setTimeout(()=>{lo.classList.add('hidden');setTimeout(()=>lo.style.display='none',400);},1000);
+  initSigCanvas();
+  initPaste();
+  initKeys();
+});
+
+function simulateLoad(){
+  const prog=document.getElementById('prog'),txt=document.getElementById('load-text');
+  const msgs=['Loading PDF engine…','Setting up canvas…','Preparing workspace…','Ready!'];
+  let pct=0,i=0;
+  const iv=setInterval(()=>{pct=Math.min(100,pct+Math.random()*30+10);prog.style.width=pct+'%';txt.textContent=msgs[Math.min(i++,3)];if(pct>=100)clearInterval(iv);},200);
+}
+
+function lib(){
+  const l=window.pdfjsLib||window['pdfjs-dist/build/pdf'];
+  if(l)l.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  return l;
+}
+
+function loadPDF(input){
+  const file=input.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=async(e)=>{
+    // Store the original ArrayBuffer — PDF.js may detach/consume it, so we keep a copy
+    S.pdfArrayBuffer=e.target.result.slice(0); // clone
+    S.pdfBytes=new Uint8Array(S.pdfArrayBuffer.slice(0)); // fresh copy for pdf-lib
+    showToast('Loading PDF…','info');
+    try{
+      const l=lib();
+      // Pass yet another copy so PDF.js doesn't detach our stored buffer
+      S.pdfDoc=await l.getDocument({data:new Uint8Array(S.pdfArrayBuffer.slice(0))}).promise;
+      S.totalPages=S.pdfDoc.numPages;S.currentPage=1;S.elements={};
+      for(let i=1;i<=S.totalPages;i++)S.elements[i]=[];
+      document.getElementById('doc-pages').textContent=S.totalPages;
+      document.getElementById('upload-prompt').style.display='none';
+      document.getElementById('canvas-stack').style.display='inline-block';
+      await renderPage(S.currentPage);
+      await buildThumbs();
+      updateStats();
+      showToast('PDF loaded!','success');
+    }catch(err){showToast('Error: '+err.message,'error');}
+  };
+  r.readAsArrayBuffer(file);input.value='';
+}
+
+async function renderPage(n){
+  if(!S.pdfDoc)return;
+  const page=await S.pdfDoc.getPage(n);
+  const vp=page.getViewport({scale:S.zoom});
+  const c=document.getElementById('pdf-canvas'),oc=document.getElementById('overlay-canvas');
+  c.width=vp.width;c.height=vp.height;
+  oc.width=vp.width;oc.height=vp.height;
+  await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+  document.getElementById('page-info').textContent=`Page ${n} / ${S.totalPages}`;
+  document.querySelectorAll('.thumb-item').forEach((t,i)=>t.classList.toggle('active',i+1===n));
+  renderElements(n);
+  if(S.gridVisible)drawGrid();
+}
+
+async function buildThumbs(){
+  const l=lib(),con=document.getElementById('thumbnail-container');
+  con.innerHTML='';
+  for(let i=1;i<=S.totalPages;i++){
+    const pg=await S.pdfDoc.getPage(i),vp=pg.getViewport({scale:0.2});
+    const item=document.createElement('div');item.className='thumb-item'+(i===S.currentPage?' active':'');item.onclick=()=>goTo(i);
+    const cv=document.createElement('canvas');cv.width=vp.width;cv.height=vp.height;
+    await pg.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+    const num=document.createElement('div');num.className='thumb-num';num.textContent=i;
+    item.appendChild(cv);item.appendChild(num);con.appendChild(item);
+  }
+}
+
+async function goTo(n){if(!S.pdfDoc||n<1||n>S.totalPages)return;deselectAll();S.currentPage=n;await renderPage(n);}
+function prevPage(){goTo(S.currentPage-1);}
+function nextPage(){goTo(S.currentPage+1);}
+
+function changeZoom(d){S.zoom=Math.max(0.3,Math.min(3,S.zoom+d));document.getElementById('zoom-level').textContent=Math.round(S.zoom*100)+'%';if(S.pdfDoc)renderPage(S.currentPage);}
+function fitPage(){if(!S.pdfDoc)return;const ws=document.getElementById('workspace'),c=document.getElementById('pdf-canvas');if(!c.width)return;S.zoom=(ws.clientWidth-80)/(c.width/S.zoom);document.getElementById('zoom-level').textContent=Math.round(S.zoom*100)+'%';renderPage(S.currentPage);}
+
+function addElement(e){pushUndo();const p=S.currentPage;if(!S.elements[p])S.elements[p]=[];S.elements[p].push(e);renderElements(p);updateStats();selectElement(e.id,p);}
+
+function renderElements(pn){
+  const layer=document.getElementById('elements-layer');layer.innerHTML='';layer.style.pointerEvents='auto';
+  (S.elements[pn]||[]).forEach(e=>createNode(e,layer));
+}
+
+function createNode(e,layer){
+  const node=document.createElement('div');
+  node.className='element-node'+(e.id===S.selectedId&&S.selectedPage===S.currentPage?' selected':'');
+  node.id='elem-'+e.id;node.style.cssText=`left:${e.x}px;top:${e.y}px;position:absolute;`;
+  const inner=document.createElement('div');inner.className='elem-inner';
+  inner.style.transform=`rotate(${e.rot||0}deg)`;inner.style.width=(e.w||150)+'px';
+
+  if(e.type==='sig'||e.type==='image'){
+    const img=document.createElement('img');img.src=e.data;img.style.cssText='width:100%;display:block;-webkit-user-drag:none';inner.appendChild(img);
+  }else{
+    const span=document.createElement('div');
+    span.style.cssText=`font-size:${e.fontSize||16}px;color:${e.color||'#f0f4ff'};font-family:${e.fontFamily||'DM Sans'};font-weight:${e.bold?'bold':'normal'};font-style:${e.italic?'italic':'normal'};white-space:pre-wrap;line-height:1.4;padding:2px 4px;min-width:30px`;
+    span.textContent=e.text;inner.appendChild(span);
+  }
+
+  const br=document.createElement('div');br.className='elem-handle br';br.addEventListener('mousedown',ev=>startResize(ev,e));
+  const rot=document.createElement('div');rot.className='elem-handle rot';rot.textContent='↻';rot.addEventListener('mousedown',ev=>startRotate(ev,e));
+  const del=document.createElement('div');del.className='elem-delete';del.innerHTML='×';del.addEventListener('mousedown',ev=>{ev.stopPropagation();deleteElement(e.id);});
+  inner.appendChild(br);inner.appendChild(rot);inner.appendChild(del);
+  node.appendChild(inner);layer.appendChild(node);
+  node.addEventListener('mousedown',ev=>{if(ev.target.classList.contains('elem-handle')||ev.target.classList.contains('elem-delete'))return;startDrag(ev,e);});
+  node.addEventListener('click',ev=>{ev.stopPropagation();selectElement(e.id,S.currentPage);});
+}
+
+function selectElement(id,page){S.selectedId=id;S.selectedPage=page;renderElements(page);const e=(S.elements[page]||[]).find(x=>x.id===id);if(e)showRight(e);}
+
+function deselectAll(){S.selectedId=null;S.selectedPage=null;renderElements(S.currentPage);document.getElementById('right-no-selection').style.display='';document.getElementById('right-selection').style.display='none';}
+
+document.getElementById('workspace').addEventListener('click',e=>{if(e.target.id==='workspace'||e.target.id==='pdf-canvas')deselectAll();});
+
+function startDrag(ev,e){
+  ev.preventDefault();selectElement(e.id,S.currentPage);
+  const sx=ev.clientX-e.x,sy=ev.clientY-e.y;
+  const onMove=mv=>{e.x=mv.clientX-sx;e.y=mv.clientY-sy;const n=document.getElementById('elem-'+e.id);if(n){n.style.left=e.x+'px';n.style.top=e.y+'px';}updatePropPanel(e);};
+  const onUp=()=>{document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);};
+  document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
+}
+
+function startResize(ev,e){
+  ev.preventDefault();ev.stopPropagation();const sx=ev.clientX,sw=e.w||150;
+  const onMove=mv=>{e.w=Math.max(30,sw+(mv.clientX-sx));const n=document.getElementById('elem-'+e.id);if(n)n.querySelector('.elem-inner').style.width=e.w+'px';updatePropPanel(e);};
+  const onUp=()=>{document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);};
+  document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
+}
+
+function startRotate(ev,e){
+  ev.preventDefault();ev.stopPropagation();const n=document.getElementById('elem-'+e.id);const r=n.getBoundingClientRect();const cx=r.left+r.width/2,cy=r.top+r.height/2;
+  const onMove=mv=>{e.rot=Math.round(Math.atan2(mv.clientY-cy,mv.clientX-cx)*180/Math.PI+90);const inner=n.querySelector('.elem-inner');if(inner)inner.style.transform=`rotate(${e.rot}deg)`;updatePropPanel(e);};
+  const onUp=()=>{document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);};
+  document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
+}
+
+function showRight(e){document.getElementById('right-no-selection').style.display='none';document.getElementById('right-selection').style.display='';updatePropPanel(e);}
+
+function updatePropPanel(e){
+  document.getElementById('prop-x').value=Math.round(e.x);
+  document.getElementById('prop-y').value=Math.round(e.y);
+  document.getElementById('prop-w').value=Math.round(e.w||150);
+  document.getElementById('prop-rot').value=Math.round(e.rot||0);
+  const tp=document.getElementById('text-props');
+  if(e.type==='text'||e.type==='date'||e.type==='initials'){
+    tp.style.display='';
+    document.getElementById('prop-size').value=e.fontSize||16;
+    document.getElementById('prop-color').value=e.color||'#f0f4ff';
+    document.getElementById('prop-font').value=e.fontFamily||'DM Sans';
+    document.getElementById('prop-bold').style.background=e.bold?'var(--accent-glow)':'';
+    document.getElementById('prop-italic').style.background=e.italic?'var(--accent-glow)':'';
+  }else{tp.style.display='none';}
+}
+
+function updateSelectedProp(key,val){
+  if(!S.selectedId)return;
+  const e=(S.elements[S.currentPage]||[]).find(x=>x.id===S.selectedId);if(!e)return;
+  e[key]=val;renderElements(S.currentPage);selectElement(S.selectedId,S.currentPage);
+}
+
+function toggleTextStyle(style){
+  if(!S.selectedId)return;
+  const e=(S.elements[S.currentPage]||[]).find(x=>x.id===S.selectedId);if(!e)return;
+  e[style]=!e[style];renderElements(S.currentPage);updatePropPanel(e);
+}
+
+function deleteElement(id){pushUndo();const p=S.currentPage;S.elements[p]=(S.elements[p]||[]).filter(e=>e.id!==id);if(S.selectedId===id)deselectAll();else renderElements(p);updateStats();}
+function deleteSelected(){if(S.selectedId)deleteElement(S.selectedId);}
+function duplicateSelected(){if(!S.selectedId)return;const e=(S.elements[S.currentPage]||[]).find(x=>x.id===S.selectedId);if(!e)return;const copy=JSON.parse(JSON.stringify(e));copy.id=++elemId;copy.x+=15;copy.y+=15;addElement(copy);showToast('Duplicated','success');}
+function clearAllElements(){if(!S.pdfDoc)return;pushUndo();S.elements[S.currentPage]=[];deselectAll();updateStats();showToast('Page cleared','info');}
+function updateStats(){let t=0;Object.values(S.elements).forEach(a=>t+=a.length);document.getElementById('doc-elements').textContent=t;}
+
+// SIGNATURE
+function initSigCanvas(){
+  const c=document.getElementById('sig-canvas');sigCtx=c.getContext('2d');clearSigCanvas();
+  c.addEventListener('mousedown',e=>{sigDrawing=true;currentStroke=[];addPt(e);});
+  c.addEventListener('mousemove',e=>{if(sigDrawing)addPt(e);});
+  c.addEventListener('mouseup',()=>{sigDrawing=false;if(currentStroke.length>1)sigStrokes.push([...currentStroke]);currentStroke=[];});
+  c.addEventListener('mouseleave',()=>{sigDrawing=false;if(currentStroke.length>1)sigStrokes.push([...currentStroke]);currentStroke=[];});
+  c.addEventListener('touchstart',e=>{e.preventDefault();sigDrawing=true;currentStroke=[];addPtTouch(e);},{passive:false});
+  c.addEventListener('touchmove',e=>{e.preventDefault();if(sigDrawing)addPtTouch(e);},{passive:false});
+  c.addEventListener('touchend',()=>{sigDrawing=false;if(currentStroke.length>1)sigStrokes.push([...currentStroke]);currentStroke=[];});
+}
+
+function addPt(e){const c=document.getElementById('sig-canvas'),r=c.getBoundingClientRect();currentStroke.push({x:e.clientX-r.left,y:e.clientY-r.top});drawSigStrokes();}
+function addPtTouch(e){const t=e.touches[0],c=document.getElementById('sig-canvas'),r=c.getBoundingClientRect();currentStroke.push({x:t.clientX-r.left,y:t.clientY-r.top});drawSigStrokes();}
+
+function drawSigStrokes(){
+  const c=document.getElementById('sig-canvas');
+  sigCtx.clearRect(0,0,c.width,c.height);
+  const col=document.getElementById('sig-color').value,lw=parseFloat(document.getElementById('sig-width').value)||2.5;
+  sigCtx.lineCap='round';sigCtx.lineJoin='round';sigCtx.strokeStyle=col;sigCtx.lineWidth=lw;
+  [...sigStrokes,currentStroke].forEach(stroke=>{
+    if(stroke.length<2)return;
+    sigCtx.beginPath();sigCtx.moveTo(stroke[0].x,stroke[0].y);
+    for(let i=1;i<stroke.length-1;i++){const mx=(stroke[i].x+stroke[i+1].x)/2,my=(stroke[i].y+stroke[i+1].y)/2;sigCtx.quadraticCurveTo(stroke[i].x,stroke[i].y,mx,my);}
+    sigCtx.lineTo(stroke[stroke.length-1].x,stroke[stroke.length-1].y);sigCtx.stroke();
+  });
+}
+
+function clearSigCanvas(){const c=document.getElementById('sig-canvas');sigCtx.clearRect(0,0,c.width,c.height);sigStrokes=[];currentStroke=[];}
+function undoSigStroke(){sigStrokes.pop();drawSigStrokes();}
+
+function openSignatureModal(){if(!S.pdfDoc){showToast('Upload a PDF first','error');return;}document.getElementById('sig-modal').classList.add('open');}
+function closeSigModal(){document.getElementById('sig-modal').classList.remove('open');}
+
+function switchSigTab(tab){
+  S.sigTab=tab;
+  document.getElementById('tab-draw').classList.toggle('active',tab==='draw');
+  document.getElementById('tab-type').classList.toggle('active',tab==='type');
+  document.getElementById('draw-panel').style.display=tab==='draw'?'':'none';
+  document.getElementById('type-panel').style.display=tab==='type'?'':'none';
+}
+
+function selectSigFont(el,font){document.querySelectorAll('.font-pill').forEach(p=>p.classList.remove('active'));el.classList.add('active');S.sigFont=font;document.getElementById('sig-type-preview').style.fontFamily=font;updateTypedPreview();}
+
+function updateTypedPreview(){
+  const text=document.getElementById('typed-sig-input').value||'Your Signature';
+  const color=document.getElementById('type-sig-color').value;
+  const prev=document.getElementById('sig-type-preview');
+  prev.textContent=text;prev.style.color=color;prev.style.fontFamily=S.sigFont;
+}
+
+function addSignatureToPage(){
+  if(!S.pdfDoc){closeSigModal();return;}
+  const c=document.getElementById('pdf-canvas');const cx=c.width/2-100,cy=c.height/2-30;
+  if(S.sigTab==='draw'){
+    const hasContent=sigStrokes.some(s=>s.length>1)||currentStroke.length>1;
+    if(!hasContent){showToast('Draw a signature first','error');return;}
+    const dataURL=document.getElementById('sig-canvas').toDataURL('image/png');
+    addElement({id:++elemId,type:'sig',x:cx,y:cy,w:200,rot:0,data:dataURL});
+  }else{
+    const text=document.getElementById('typed-sig-input').value;if(!text.trim()){showToast('Type a signature first','error');return;}
+    const color=document.getElementById('type-sig-color').value;
+    const size=parseInt(document.getElementById('type-sig-size').value)||36;
+    addElement({id:++elemId,type:'text',x:cx,y:cy,w:260,rot:0,text,fontSize:size,color,fontFamily:S.sigFont});
+  }
+  closeSigModal();showToast('Signature added','success');
+}
+
+function openTextModal(){if(!S.pdfDoc){showToast('Upload a PDF first','error');return;}document.getElementById('text-modal').classList.add('open');}
+function closeTextModal(){document.getElementById('text-modal').classList.remove('open');}
+
+function addTextElement(){
+  const text=document.getElementById('text-modal-input').value;if(!text.trim()){showToast('Enter some text','error');return;}
+  const c=document.getElementById('pdf-canvas');
+  addElement({id:++elemId,type:'text',x:c.width/2-80,y:c.height/2,w:200,rot:0,text,fontSize:parseInt(document.getElementById('text-modal-size').value)||16,color:document.getElementById('text-modal-color').value,fontFamily:document.getElementById('text-modal-font').value});
+  closeTextModal();document.getElementById('text-modal-input').value='';showToast('Text added','success');
+}
+
+function addDateElement(){
+  if(!S.pdfDoc){showToast('Upload a PDF first','error');return;}
+  const c=document.getElementById('pdf-canvas');
+  const today=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  addElement({id:++elemId,type:'date',x:40,y:c.height-60,w:220,rot:0,text:today,fontSize:13,color:'#f0f4ff',fontFamily:'DM Sans'});
+  showToast('Date added','success');
+}
+
+function addInitialsElement(){
+  if(!S.pdfDoc){showToast('Upload a PDF first','error');return;}
+  const init=prompt('Enter your initials:','A.B.');if(!init)return;
+  const c=document.getElementById('pdf-canvas');
+  addElement({id:++elemId,type:'initials',x:40,y:40,w:80,rot:0,text:init,fontSize:22,color:'#4f8ef7',fontFamily:'DM Sans',bold:true});
+  showToast('Initials added','success');
+}
+
+function addImageFromFile(input){
+  const file=input.files[0];if(!file)return;
+  if(!S.pdfDoc){showToast('Upload a PDF first','error');return;}
+  const r=new FileReader();r.onload=e=>{const c=document.getElementById('pdf-canvas');addElement({id:++elemId,type:'image',x:c.width/2-75,y:c.height/2-50,w:150,rot:0,data:e.target.result});showToast('Image added','success');};
+  r.readAsDataURL(file);input.value='';
+}
+
+function addImageFromData(data){if(!S.pdfDoc){showToast('Upload a PDF first','error');return;}const c=document.getElementById('pdf-canvas');addElement({id:++elemId,type:'image',x:c.width/2-75,y:c.height/2-50,w:150,rot:0,data});showToast('Image pasted','success');}
+
+function handleDrop(ev){
+  ev.preventDefault();const files=ev.dataTransfer.files;if(!files.length)return;
+  const file=files[0];
+  if(file.type==='application/pdf'){const fi={files:[file]};loadPDF(fi);}
+  else if(file.type.startsWith('image/')){const r=new FileReader();r.onload=e=>addImageFromData(e.target.result);r.readAsDataURL(file);}
+}
+
+function initPaste(){
+  document.addEventListener('paste',e=>{
+    for(const item of e.clipboardData.items){
+      if(item.type.startsWith('image/')){const blob=item.getAsFile();const r=new FileReader();r.onload=ev=>addImageFromData(ev.target.result);r.readAsDataURL(blob);e.preventDefault();return;}
+    }
+  });
+}
+
+function toggleGrid(){
+  S.gridVisible=!S.gridVisible;const svg=document.getElementById('grid-svg'),btn=document.getElementById('grid-btn');
+  if(S.gridVisible){drawGrid();svg.style.display='';btn.style.borderColor='var(--accent)';btn.style.color='var(--accent)';}
+  else{svg.style.display='none';btn.style.borderColor='';btn.style.color='';}
+}
+
+function drawGrid(){
+  const c=document.getElementById('pdf-canvas'),svg=document.getElementById('grid-svg');if(!c.width)return;
+  svg.setAttribute('width',c.width);svg.setAttribute('height',c.height);
+  svg.style.cssText=`position:absolute;top:0;left:0;pointer-events:none;width:${c.width}px;height:${c.height}px`;
+  const step=20;let d='';
+  for(let x=0;x<=c.width;x+=step)d+=`M${x},0 L${x},${c.height} `;
+  for(let y=0;y<=c.height;y+=step)d+=`M0,${y} L${c.width},${y} `;
+  svg.innerHTML=`<path d="${d}" stroke="rgba(99,179,237,0.12)" stroke-width="0.5" fill="none"/>`;
+}
+
+function pushUndo(){S.undoStack.push(JSON.parse(JSON.stringify(S.elements)));if(S.undoStack.length>30)S.undoStack.shift();}
+function undoAction(){if(!S.undoStack.length){showToast('Nothing to undo','info');return;}S.elements=S.undoStack.pop();deselectAll();updateStats();showToast('Undone','info');}
+
+function initKeys(){
+  document.addEventListener('keydown',e=>{
+    if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
+    if((e.metaKey||e.ctrlKey)&&e.key==='z'){e.preventDefault();undoAction();}
+    if(e.key==='Delete'||e.key==='Backspace')deleteSelected();
+    if((e.metaKey||e.ctrlKey)&&e.key==='d'){e.preventDefault();duplicateSelected();}
+    if(e.key==='ArrowLeft')prevPage();if(e.key==='ArrowRight')nextPage();
+    if(e.key==='+'||e.key==='=')changeZoom(0.1);if(e.key==='-')changeZoom(-0.1);
+    if(e.key==='Escape')deselectAll();
+  });
+}
+
+async function exportPDF(){
+  if(!S.pdfDoc){showToast('Upload a PDF first','error');return;}
+  const btn=document.getElementById('export-btn');
+  const origHTML=btn.innerHTML;btn.textContent='Exporting…';btn.disabled=true;
+  showToast('Generating high-quality PDF…','info');
+  try{
+    const {PDFDocument,rgb,StandardFonts}=PDFLib;
+
+    // Always re-read from the stored ArrayBuffer clone — never reuse a buffer PDF.js touched
+    if(!S.pdfArrayBuffer){showToast('PDF data lost — please re-upload','error');return;}
+    const freshBytes=new Uint8Array(S.pdfArrayBuffer.slice(0));
+    const doc=await PDFDocument.load(freshBytes,{ignoreEncryption:true});
+    const pages=doc.getPages();
+    const hFont=await doc.embedFont(StandardFonts.Helvetica);
+    const hBold=await doc.embedFont(StandardFonts.HelveticaBold);
+
+    // High-quality render scale: use 2x for crisp output regardless of current zoom
+    const EXPORT_SCALE=2;
+
+    for(let pn=1;pn<=S.totalPages;pn++){
+      const pdfPage=pages[pn-1];
+      const{width:pW,height:pH}=pdfPage.getSize();
+      const renderedPage=await S.pdfDoc.getPage(pn);
+      // Get viewport at export scale to know pixel dimensions
+      const vp=renderedPage.getViewport({scale:EXPORT_SCALE});
+      // Scale factors: map canvas pixel coords → PDF point coords
+      const sx=pW/vp.width;
+      const sy=pH/vp.height;
+      // Element coords were placed at S.zoom, so we need to convert:
+      // elemPixel (at S.zoom) → PDF points
+      const elemVp=renderedPage.getViewport({scale:S.zoom});
+      const esx=pW/elemVp.width; // elem scale x
+      const esy=pH/elemVp.height; // elem scale y
+
+      for(const e of (S.elements[pn]||[])){
+        // Convert element top-left corner from screen-pixel to PDF-point space
+        const px=e.x*esx;
+        const py=pH-(e.y*esy); // PDF y is bottom-up
+
+        if(e.type==='sig'||e.type==='image'){
+          try{
+            // Re-render signature canvas at 2x for quality if it's a drawn sig
+            const raw=e.data.split(',')[1];
+            if(!raw)continue;
+            const bytes=Uint8Array.from(atob(raw),c=>c.charCodeAt(0));
+            let embImg;
+            const isPng=e.data.startsWith('data:image/png')||e.data.includes(';base64,iVBORw');
+            try{
+              if(isPng){embImg=await doc.embedPng(bytes);}
+              else{try{embImg=await doc.embedJpg(bytes);}catch{embImg=await doc.embedPng(bytes);}}
+            }catch{
+              try{embImg=await doc.embedPng(bytes);}catch{continue;}
+            }
+            const aspect=embImg.height/embImg.width;
+            const dw=e.w*esx;
+            const dh=dw*aspect;
+            const rotRad=e.rot?(e.rot*Math.PI/180):0;
+            pdfPage.drawImage(embImg,{
+              x:px,y:py-dh,
+              width:dw,height:dh,
+              rotate:{type:'degrees',angle:-(e.rot||0)}
+            });
+          }catch(ie){console.warn('Image embed failed:',ie);}
+
+        }else if(e.type==='text'||e.type==='date'||e.type==='initials'){
+          const hex=(e.color||'#000000').replace('#','');
+          const r=parseInt(hex.slice(0,2),16)/255||0;
+          const g=parseInt(hex.slice(2,4),16)/255||0;
+          const b2=parseInt(hex.slice(4,6),16)/255||0;
+          const font=e.bold?hBold:hFont;
+          const sz=Math.max(4,(e.fontSize||14)*((esx+esy)/2));
+          const lines=(e.text||'').split('\n');
+          lines.forEach((line,li)=>{
+            if(!line.trim())return;
+            try{
+              pdfPage.drawText(line,{
+                x:px+2,
+                y:py-sz-(li*sz*1.45),
+                size:sz,font,
+                color:rgb(Math.min(1,r),Math.min(1,g),Math.min(1,b2)),
+                rotate:{type:'degrees',angle:-(e.rot||0)}
+              });
+            }catch(te){console.warn('Text draw failed:',te);}
+          });
+        }
+      }
+    }
+
+    const outBytes=await doc.save();
+    const blob=new Blob([outBytes],{type:'application/pdf'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='signed-document.pdf';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    showToast('PDF exported successfully!','success');
+  }catch(err){
+    console.error('Export error:',err);
+    showToast('Export error: '+err.message,'error');
+  }finally{
+    btn.innerHTML=origHTML;btn.disabled=false;
+  }
+}
+
+function showToast(msg,type='info'){
+  const c=document.getElementById('toast-container'),t=document.createElement('div');
+  t.className='toast '+type;t.textContent=msg;c.appendChild(t);
+  setTimeout(()=>{t.style.transition='opacity .3s';t.style.opacity='0';setTimeout(()=>t.remove(),300);},2500);
+}
+</script>
+</body>
+<footer class="app-footer">
+  <div class="footer-left">
+    <span>© 2026 Noah-Sign. All rights reserved.</span>
+  </div>
+  <div class="footer-center">
+    <span>Client-side PDF signing and annotation platform.</span>
+  </div>
+  <div class="footer-right">
+    <span>Version 1.0</span>
+  </div>
+</footer>
+</html>
