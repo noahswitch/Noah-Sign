@@ -125,6 +125,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 input[type=color]{-webkit-appearance:none;width:26px;height:26px;border:none;background:none;cursor:pointer;padding:0}
 input[type=color]::-webkit-color-swatch-wrapper{padding:0}
 input[type=color]::-webkit-color-swatch{border-radius:5px;border:1px solid var(--border)}
+#brush-panel{border:1px solid var(--border);border-radius:10px;background:var(--bg-card);margin-top:6px}
+.brush-size-row{display:flex;align-items:center;gap:8px}
+.brush-size-row input[type=range]{flex:1}
+#brush-size-label{font-size:11px;color:var(--text-secondary);min-width:30px;text-align:right}
+.brush-swatches{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
+.brush-swatch{width:18px;height:18px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:all .15s}
+.brush-swatch.active{border-color:var(--text-primary);transform:scale(1.15)}
+#brush-preview-dot{border-radius:50%;flex-shrink:0;transition:all .1s}
 </style>
 </head>
 <body>
@@ -197,10 +205,41 @@ input[type=color]::-webkit-color-swatch{border-radius:5px;border:1px solid var(-
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h8m-8 5h16"/></svg>
           Initials
         </button>
+        <button class="tool-btn" id="brush-tool-btn" onclick="toggleBrushMode()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>
+          Brush
+        </button>
         <button class="tool-btn" onclick="clearAllElements()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
           Clear
         </button>
+      </div>
+      <div id="brush-panel" style="display:none">
+        <div class="sidebar-section" style="padding:9px">
+          <div class="sidebar-section-title" style="margin-bottom:6px">Brush Settings</div>
+          <div class="brush-swatches" id="brush-swatches">
+            <div class="brush-swatch active" style="background:#4f8ef7" onclick="setBrushColor('#4f8ef7',this)"></div>
+            <div class="brush-swatch" style="background:#f87171" onclick="setBrushColor('#f87171',this)"></div>
+            <div class="brush-swatch" style="background:#34d399" onclick="setBrushColor('#34d399',this)"></div>
+            <div class="brush-swatch" style="background:#fbbf24" onclick="setBrushColor('#fbbf24',this)"></div>
+            <div class="brush-swatch" style="background:#a78bfa" onclick="setBrushColor('#a78bfa',this)"></div>
+            <div class="brush-swatch" style="background:#f0f4ff" onclick="setBrushColor('#f0f4ff',this)"></div>
+            <div class="brush-swatch" style="background:#0a0a0a" onclick="setBrushColor('#0a0a0a',this)"></div>
+            <input type="color" id="brush-color-custom" value="#4f8ef7" onchange="setBrushColor(this.value)" style="width:18px;height:18px">
+          </div>
+          <div class="prop-row" style="margin-bottom:5px">
+            <span class="prop-label">Size</span>
+            <span id="brush-size-label">4px</span>
+          </div>
+          <div class="brush-size-row">
+            <div id="brush-preview-dot" style="background:#4f8ef7"></div>
+            <input type="range" id="brush-size" min="1" max="40" value="4" oninput="setBrushSize(this.value)">
+          </div>
+          <div class="btn-row" style="margin-top:9px">
+            <button class="btn-sm" onclick="undoBrushStroke()">Undo Stroke</button>
+            <button class="btn-sm danger" onclick="clearBrushPage()">Clear Page</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="sidebar-divider"></div>
@@ -345,14 +384,16 @@ input[type=color]::-webkit-color-swatch{border-radius:5px;border:1px solid var(-
 <div id="toast-container"></div>
 
 <script>
-const S={pdfDoc:null,pdfBytes:null,pdfArrayBuffer:null,currentPage:1,totalPages:0,zoom:1,elements:{},selectedId:null,selectedPage:null,undoStack:[],gridVisible:false,sigTab:'draw',sigFont:'cursive'};
+const S={pdfDoc:null,pdfBytes:null,pdfArrayBuffer:null,currentPage:1,totalPages:0,zoom:1,elements:{},selectedId:null,selectedPage:null,undoStack:[],gridVisible:false,sigTab:'draw',sigFont:'cursive',brushMode:false,brushColor:'#4f8ef7',brushSize:4,brushStrokes:{}};
 let elemId=0,sigCtx,sigDrawing=false,sigStrokes=[],currentStroke=[];
+let brushCtx,brushDrawing=false,brushCurrentStroke=null;
 
 window.addEventListener('DOMContentLoaded',()=>{
   const lo=document.getElementById('loading-overlay');
   simulateLoad();
   setTimeout(()=>{lo.classList.add('hidden');setTimeout(()=>lo.style.display='none',400);},1000);
   initSigCanvas();
+  initBrushCanvas();
   initPaste();
   initKeys();
 });
@@ -382,8 +423,8 @@ function loadPDF(input){
       const l=lib();
       // Pass yet another copy so PDF.js doesn't detach our stored buffer
       S.pdfDoc=await l.getDocument({data:new Uint8Array(S.pdfArrayBuffer.slice(0))}).promise;
-      S.totalPages=S.pdfDoc.numPages;S.currentPage=1;S.elements={};
-      for(let i=1;i<=S.totalPages;i++)S.elements[i]=[];
+      S.totalPages=S.pdfDoc.numPages;S.currentPage=1;S.elements={};S.brushStrokes={};
+      for(let i=1;i<=S.totalPages;i++){S.elements[i]=[];S.brushStrokes[i]=[];}
       document.getElementById('doc-pages').textContent=S.totalPages;
       document.getElementById('upload-prompt').style.display='none';
       document.getElementById('canvas-stack').style.display='inline-block';
@@ -407,6 +448,7 @@ async function renderPage(n){
   document.getElementById('page-info').textContent=`Page ${n} / ${S.totalPages}`;
   document.querySelectorAll('.thumb-item').forEach((t,i)=>t.classList.toggle('active',i+1===n));
   renderElements(n);
+  drawBrushStrokesOnOverlay();
   if(S.gridVisible)drawGrid();
 }
 
@@ -468,6 +510,7 @@ function deselectAll(){S.selectedId=null;S.selectedPage=null;renderElements(S.cu
 document.getElementById('workspace').addEventListener('click',e=>{if(e.target.id==='workspace'||e.target.id==='pdf-canvas')deselectAll();});
 
 function startDrag(ev,e){
+  if(S.brushMode)return;
   ev.preventDefault();selectElement(e.id,S.currentPage);
   const sx=ev.clientX-e.x,sy=ev.clientY-e.y;
   const onMove=mv=>{e.x=mv.clientX-sx;e.y=mv.clientY-sy;const n=document.getElementById('elem-'+e.id);if(n){n.style.left=e.x+'px';n.style.top=e.y+'px';}updatePropPanel(e);};
@@ -643,6 +686,88 @@ function initPaste(){
   });
 }
 
+// BRUSH TOOL
+function toggleBrushMode(){
+  if(!S.pdfDoc){showToast('Upload a PDF first','error');return;}
+  S.brushMode=!S.brushMode;
+  document.getElementById('brush-tool-btn').classList.toggle('active',S.brushMode);
+  document.getElementById('brush-panel').style.display=S.brushMode?'':'none';
+  const oc=document.getElementById('overlay-canvas'),layer=document.getElementById('elements-layer');
+  oc.style.pointerEvents=S.brushMode?'auto':'none';
+  oc.style.cursor=S.brushMode?'crosshair':'default';
+  layer.style.pointerEvents=S.brushMode?'none':'auto';
+  if(S.brushMode){deselectAll();showToast('Brush mode on — draw on the page','info');}
+}
+
+function initBrushCanvas(){
+  const oc=document.getElementById('overlay-canvas');
+  brushCtx=oc.getContext('2d');
+  oc.addEventListener('mousedown',e=>{if(!S.brushMode)return;brushDrawing=true;brushCurrentStroke={color:S.brushColor,width:S.brushSize,points:[]};addBrushPt(e,oc);});
+  oc.addEventListener('mousemove',e=>{if(!S.brushMode||!brushDrawing)return;addBrushPt(e,oc);});
+  window.addEventListener('mouseup',()=>finishBrushStroke());
+  oc.addEventListener('touchstart',e=>{if(!S.brushMode)return;e.preventDefault();brushDrawing=true;brushCurrentStroke={color:S.brushColor,width:S.brushSize,points:[]};addBrushPtTouch(e,oc);},{passive:false});
+  oc.addEventListener('touchmove',e=>{if(!S.brushMode||!brushDrawing)return;e.preventDefault();addBrushPtTouch(e,oc);},{passive:false});
+  oc.addEventListener('touchend',()=>finishBrushStroke());
+}
+
+function addBrushPt(e,oc){const r=oc.getBoundingClientRect();brushCurrentStroke.points.push({x:e.clientX-r.left,y:e.clientY-r.top});drawBrushStrokesOnOverlay();}
+function addBrushPtTouch(e,oc){const t=e.touches[0],r=oc.getBoundingClientRect();brushCurrentStroke.points.push({x:t.clientX-r.left,y:t.clientY-r.top});drawBrushStrokesOnOverlay();}
+
+function finishBrushStroke(){
+  if(!brushDrawing)return;
+  brushDrawing=false;
+  if(brushCurrentStroke&&brushCurrentStroke.points.length>1){
+    pushUndo();
+    if(!S.brushStrokes[S.currentPage])S.brushStrokes[S.currentPage]=[];
+    S.brushStrokes[S.currentPage].push(brushCurrentStroke);
+    updateStats();
+  }
+  brushCurrentStroke=null;
+  drawBrushStrokesOnOverlay();
+}
+
+function drawBrushStrokesOnOverlay(){
+  const oc=document.getElementById('overlay-canvas');
+  if(!brushCtx||!oc.width)return;
+  brushCtx.clearRect(0,0,oc.width,oc.height);
+  const all=[...(S.brushStrokes[S.currentPage]||[])];
+  if(brushCurrentStroke)all.push(brushCurrentStroke);
+  brushCtx.lineCap='round';brushCtx.lineJoin='round';
+  all.forEach(stroke=>{
+    const pts=stroke.points;if(pts.length<2)return;
+    brushCtx.strokeStyle=stroke.color;brushCtx.lineWidth=stroke.width;
+    brushCtx.beginPath();brushCtx.moveTo(pts[0].x,pts[0].y);
+    for(let i=1;i<pts.length-1;i++){const mx=(pts[i].x+pts[i+1].x)/2,my=(pts[i].y+pts[i+1].y)/2;brushCtx.quadraticCurveTo(pts[i].x,pts[i].y,mx,my);}
+    brushCtx.lineTo(pts[pts.length-1].x,pts[pts.length-1].y);brushCtx.stroke();
+  });
+}
+
+function setBrushColor(hex,el){
+  S.brushColor=hex;
+  document.getElementById('brush-preview-dot').style.background=hex;
+  if(el){document.querySelectorAll('.brush-swatch').forEach(s=>s.classList.remove('active'));el.classList.add('active');}
+  else{document.querySelectorAll('.brush-swatch').forEach(s=>s.classList.remove('active'));}
+}
+
+function setBrushSize(val){
+  S.brushSize=parseInt(val);
+  document.getElementById('brush-size-label').textContent=val+'px';
+  const dot=document.getElementById('brush-preview-dot');
+  const d=Math.max(4,Math.min(28,S.brushSize));
+  dot.style.width=d+'px';dot.style.height=d+'px';
+}
+
+function undoBrushStroke(){
+  const arr=S.brushStrokes[S.currentPage]||[];
+  if(!arr.length){showToast('Nothing to undo','info');return;}
+  pushUndo();arr.pop();drawBrushStrokesOnOverlay();updateStats();showToast('Stroke undone','info');
+}
+
+function clearBrushPage(){
+  if(!(S.brushStrokes[S.currentPage]||[]).length){showToast('No strokes on this page','info');return;}
+  pushUndo();S.brushStrokes[S.currentPage]=[];drawBrushStrokesOnOverlay();updateStats();showToast('Brush strokes cleared','info');
+}
+
 function toggleGrid(){
   S.gridVisible=!S.gridVisible;const svg=document.getElementById('grid-svg'),btn=document.getElementById('grid-btn');
   if(S.gridVisible){drawGrid();svg.style.display='';btn.style.borderColor='var(--accent)';btn.style.color='var(--accent)';}
@@ -659,8 +784,13 @@ function drawGrid(){
   svg.innerHTML=`<path d="${d}" stroke="rgba(99,179,237,0.12)" stroke-width="0.5" fill="none"/>`;
 }
 
-function pushUndo(){S.undoStack.push(JSON.parse(JSON.stringify(S.elements)));if(S.undoStack.length>30)S.undoStack.shift();}
-function undoAction(){if(!S.undoStack.length){showToast('Nothing to undo','info');return;}S.elements=S.undoStack.pop();deselectAll();updateStats();showToast('Undone','info');}
+function pushUndo(){S.undoStack.push({elements:JSON.parse(JSON.stringify(S.elements)),brush:JSON.parse(JSON.stringify(S.brushStrokes))});if(S.undoStack.length>30)S.undoStack.shift();}
+function undoAction(){
+  if(!S.undoStack.length){showToast('Nothing to undo','info');return;}
+  const snap=S.undoStack.pop();
+  S.elements=snap.elements;S.brushStrokes=snap.brush;
+  deselectAll();drawBrushStrokesOnOverlay();updateStats();showToast('Undone','info');
+}
 
 function initKeys(){
   document.addEventListener('keydown',e=>{
@@ -672,6 +802,14 @@ function initKeys(){
     if(e.key==='+'||e.key==='=')changeZoom(0.1);if(e.key==='-')changeZoom(-0.1);
     if(e.key==='Escape')deselectAll();
   });
+}
+
+function hexToRgb01(hex){
+  hex=(hex||'#000000').replace('#','');
+  const r=parseInt(hex.slice(0,2),16)/255||0;
+  const g=parseInt(hex.slice(2,4),16)/255||0;
+  const b=parseInt(hex.slice(4,6),16)/255||0;
+  return{r:Math.min(1,r),g:Math.min(1,g),b:Math.min(1,b)};
 }
 
 async function exportPDF(){
@@ -690,18 +828,10 @@ async function exportPDF(){
     const hFont=await doc.embedFont(StandardFonts.Helvetica);
     const hBold=await doc.embedFont(StandardFonts.HelveticaBold);
 
-    // High-quality render scale: use 2x for crisp output regardless of current zoom
-    const EXPORT_SCALE=2;
-
     for(let pn=1;pn<=S.totalPages;pn++){
       const pdfPage=pages[pn-1];
       const{width:pW,height:pH}=pdfPage.getSize();
       const renderedPage=await S.pdfDoc.getPage(pn);
-      // Get viewport at export scale to know pixel dimensions
-      const vp=renderedPage.getViewport({scale:EXPORT_SCALE});
-      // Scale factors: map canvas pixel coords → PDF point coords
-      const sx=pW/vp.width;
-      const sy=pH/vp.height;
       // Element coords were placed at S.zoom, so we need to convert:
       // elemPixel (at S.zoom) → PDF points
       const elemVp=renderedPage.getViewport({scale:S.zoom});
@@ -730,7 +860,6 @@ async function exportPDF(){
             const aspect=embImg.height/embImg.width;
             const dw=e.w*esx;
             const dh=dw*aspect;
-            const rotRad=e.rot?(e.rot*Math.PI/180):0;
             pdfPage.drawImage(embImg,{
               x:px,y:py-dh,
               width:dw,height:dh,
@@ -739,10 +868,7 @@ async function exportPDF(){
           }catch(ie){console.warn('Image embed failed:',ie);}
 
         }else if(e.type==='text'||e.type==='date'||e.type==='initials'){
-          const hex=(e.color||'#000000').replace('#','');
-          const r=parseInt(hex.slice(0,2),16)/255||0;
-          const g=parseInt(hex.slice(2,4),16)/255||0;
-          const b2=parseInt(hex.slice(4,6),16)/255||0;
+          const col=hexToRgb01(e.color);
           const font=e.bold?hBold:hFont;
           const sz=Math.max(4,(e.fontSize||14)*((esx+esy)/2));
           const lines=(e.text||'').split('\n');
@@ -753,11 +879,30 @@ async function exportPDF(){
                 x:px+2,
                 y:py-sz-(li*sz*1.45),
                 size:sz,font,
-                color:rgb(Math.min(1,r),Math.min(1,g),Math.min(1,b2)),
+                color:rgb(col.r,col.g,col.b),
                 rotate:{type:'degrees',angle:-(e.rot||0)}
               });
             }catch(te){console.warn('Text draw failed:',te);}
           });
+        }
+      }
+
+      // Bake brush strokes into the page
+      for(const stroke of (S.brushStrokes[pn]||[])){
+        const pts=stroke.points;if(!pts||pts.length<2)continue;
+        const col=hexToRgb01(stroke.color);
+        const lw=Math.max(0.5,stroke.width*((esx+esy)/2));
+        for(let i=0;i<pts.length-1;i++){
+          const p1=pts[i],p2=pts[i+1];
+          try{
+            pdfPage.drawLine({
+              start:{x:p1.x*esx,y:pH-(p1.y*esy)},
+              end:{x:p2.x*esx,y:pH-(p2.y*esy)},
+              thickness:lw,
+              color:rgb(col.r,col.g,col.b),
+              opacity:1
+            });
+          }catch(le){console.warn('Brush line draw failed:',le);}
         }
       }
     }
