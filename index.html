@@ -469,13 +469,36 @@ async function goTo(n){if(!S.pdfDoc||n<1||n>S.totalPages)return;deselectAll();S.
 function prevPage(){goTo(S.currentPage-1);}
 function nextPage(){goTo(S.currentPage+1);}
 
-function changeZoom(d){S.zoom=Math.max(0.3,Math.min(3,S.zoom+d));document.getElementById('zoom-level').textContent=Math.round(S.zoom*100)+'%';if(S.pdfDoc)renderPage(S.currentPage);}
-function fitPage(){if(!S.pdfDoc)return;const ws=document.getElementById('workspace'),c=document.getElementById('pdf-canvas');if(!c.width)return;S.zoom=(ws.clientWidth-80)/(c.width/S.zoom);document.getElementById('zoom-level').textContent=Math.round(S.zoom*100)+'%';renderPage(S.currentPage);}
+function changeZoom(d){
+  const newZoom=Math.max(0.3,Math.min(3,S.zoom+d));
+  rescaleBrushStrokes(newZoom/S.zoom);
+  S.zoom=newZoom;
+  document.getElementById('zoom-level').textContent=Math.round(S.zoom*100)+'%';if(S.pdfDoc)renderPage(S.currentPage);
+}
+function fitPage(){
+  if(!S.pdfDoc)return;const ws=document.getElementById('workspace'),c=document.getElementById('pdf-canvas');if(!c.width)return;
+  const newZoom=(ws.clientWidth-80)/(c.width/S.zoom);
+  rescaleBrushStrokes(newZoom/S.zoom);
+  S.zoom=newZoom;
+  document.getElementById('zoom-level').textContent=Math.round(S.zoom*100)+'%';renderPage(S.currentPage);
+}
+function rescaleBrushStrokes(factor){
+  if(!factor||factor===1)return;
+  Object.values(S.brushStrokes).forEach(arr=>{
+    (arr||[]).forEach(stroke=>{
+      stroke.width=stroke.width*factor;
+      stroke.points.forEach(p=>{p.x*=factor;p.y*=factor;});
+    });
+  });
+}
 
 function addElement(e){pushUndo();const p=S.currentPage;if(!S.elements[p])S.elements[p]=[];S.elements[p].push(e);renderElements(p);updateStats();selectElement(e.id,p);}
 
 function renderElements(pn){
-  const layer=document.getElementById('elements-layer');layer.innerHTML='';layer.style.pointerEvents='auto';
+  const layer=document.getElementById('elements-layer');layer.innerHTML='';
+  // Respect brush mode: while brushing, the elements layer must NOT capture
+  // pointer events, or it blocks mousedown/move from reaching overlay-canvas.
+  layer.style.pointerEvents=S.brushMode?'none':'auto';
   (S.elements[pn]||[]).forEach(e=>createNode(e,layer));
 }
 
