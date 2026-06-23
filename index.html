@@ -130,9 +130,22 @@ input[type=color]::-webkit-color-swatch{border-radius:5px;border:1px solid var(-
 .brush-size-row input[type=range]{flex:1}
 #brush-size-label{font-size:11px;color:var(--text-secondary);min-width:30px;text-align:right}
 .brush-swatches{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
-.brush-swatch{width:18px;height:18px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:all .15s}
-.brush-swatch.active{border-color:var(--text-primary);transform:scale(1.15)}
-#brush-preview-dot{border-radius:50%;flex-shrink:0;transition:all .1s}
+.brush-swatch{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.18);cursor:pointer;transition:all .15s}
+.brush-swatch.active{border-color:var(--accent);transform:scale(1.15);box-shadow:0 0 0 2px var(--accent-glow)}
+#brush-preview-dot{border-radius:50%;flex-shrink:0;transition:all .1s;border:1px solid rgba(255,255,255,.25)}
+#selection-layer{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:6;cursor:crosshair}
+#selection-rect{position:absolute;border:1.5px dashed var(--accent2);background:rgba(167,139,250,0.14);display:none;pointer-events:none}
+.elem-inner.elem-multiselected{outline:2px dashed var(--accent2) !important;outline-offset:2px}
+#selection-panel{border:1px solid var(--border);border-radius:10px;background:var(--bg-card);margin-top:6px}
+#sel-count{font-size:11px;color:var(--text-secondary);line-height:1.5}
+#history-modal{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.75);backdrop-filter:blur(8px)}
+#history-modal.open{display:flex;animation:fadeIn .2s ease}
+#history-list{max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:7px;margin-bottom:6px}
+.history-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 11px;border:1px solid var(--border);border-radius:9px;background:var(--bg-card)}
+.history-row .hr-info{display:flex;flex-direction:column;gap:2px}
+.history-row .hr-time{font-size:12px;font-weight:500;color:var(--text-primary)}
+.history-row .hr-meta{font-size:10px;color:var(--text-muted)}
+.history-empty{text-align:center;color:var(--text-muted);font-size:12px;padding:24px 0}
 </style>
 </head>
 <body>
@@ -172,6 +185,14 @@ input[type=color]::-webkit-color-swatch{border-radius:5px;border:1px solid var(-
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
     Upload PDF
   </label>
+  <button class="nav-btn" onclick="saveSnapshot()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+    Save
+  </button>
+  <button class="nav-btn" onclick="openHistoryModal()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>
+    History
+  </button>
   <button class="nav-btn primary" onclick="exportPDF()" id="export-btn">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     Export PDF
@@ -209,6 +230,10 @@ input[type=color]::-webkit-color-swatch{border-radius:5px;border:1px solid var(-
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>
           Brush
         </button>
+        <button class="tool-btn" id="select-tool-btn" onclick="toggleSelectMode()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="5" width="14" height="14" rx="1.5" stroke-dasharray="3 2.5"/></svg>
+          Select
+        </button>
         <button class="tool-btn" onclick="clearAllElements()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
           Clear
@@ -218,26 +243,37 @@ input[type=color]::-webkit-color-swatch{border-radius:5px;border:1px solid var(-
         <div class="sidebar-section" style="padding:9px">
           <div class="sidebar-section-title" style="margin-bottom:6px">Brush Settings</div>
           <div class="brush-swatches" id="brush-swatches">
-            <div class="brush-swatch active" style="background:#4f8ef7" onclick="setBrushColor('#4f8ef7',this)"></div>
+            <div class="brush-swatch active" style="background:#ffffff" onclick="setBrushColor('#ffffff',this)" title="White"></div>
+            <div class="brush-swatch" style="background:#4f8ef7" onclick="setBrushColor('#4f8ef7',this)"></div>
             <div class="brush-swatch" style="background:#f87171" onclick="setBrushColor('#f87171',this)"></div>
             <div class="brush-swatch" style="background:#34d399" onclick="setBrushColor('#34d399',this)"></div>
             <div class="brush-swatch" style="background:#fbbf24" onclick="setBrushColor('#fbbf24',this)"></div>
             <div class="brush-swatch" style="background:#a78bfa" onclick="setBrushColor('#a78bfa',this)"></div>
-            <div class="brush-swatch" style="background:#f0f4ff" onclick="setBrushColor('#f0f4ff',this)"></div>
             <div class="brush-swatch" style="background:#0a0a0a" onclick="setBrushColor('#0a0a0a',this)"></div>
-            <input type="color" id="brush-color-custom" value="#4f8ef7" onchange="setBrushColor(this.value)" style="width:18px;height:18px">
+            <input type="color" id="brush-color-custom" value="#ffffff" onchange="setBrushColor(this.value)" style="width:18px;height:18px">
           </div>
           <div class="prop-row" style="margin-bottom:5px">
             <span class="prop-label">Size</span>
             <span id="brush-size-label">4px</span>
           </div>
           <div class="brush-size-row">
-            <div id="brush-preview-dot" style="background:#4f8ef7"></div>
+            <div id="brush-preview-dot" style="background:#ffffff"></div>
             <input type="range" id="brush-size" min="1" max="40" value="4" oninput="setBrushSize(this.value)">
           </div>
           <div class="btn-row" style="margin-top:9px">
             <button class="btn-sm" onclick="undoBrushStroke()">Undo Stroke</button>
             <button class="btn-sm danger" onclick="clearBrushPage()">Clear Page</button>
+          </div>
+        </div>
+      </div>
+      <div id="selection-panel" style="display:none">
+        <div class="sidebar-section" style="padding:9px">
+          <div class="sidebar-section-title" style="margin-bottom:6px">Selection</div>
+          <p id="sel-count">Drag a rectangle on the page to select elements or brush strokes.</p>
+          <div class="btn-row" style="margin-top:9px">
+            <button class="btn-sm" onclick="copySelection()">Copy</button>
+            <button class="btn-sm danger" onclick="deleteSelection()">Delete</button>
+            <button class="btn-sm" onclick="clearSelection()">Clear</button>
           </div>
         </div>
       </div>
@@ -261,6 +297,7 @@ input[type=color]::-webkit-color-swatch{border-radius:5px;border:1px solid var(-
       <canvas id="overlay-canvas"></canvas>
       <div id="elements-layer"></div>
       <svg id="grid-svg"></svg>
+      <div id="selection-layer"><div id="selection-rect"></div></div>
     </div>
   </div>
 
@@ -381,12 +418,27 @@ input[type=color]::-webkit-color-swatch{border-radius:5px;border:1px solid var(-
   </div>
 </div>
 
+<div id="history-modal">
+  <div class="modal-card" style="width:430px">
+    <div class="modal-title">
+      Save History
+      <button class="modal-close" onclick="closeHistoryModal()">×</button>
+    </div>
+    <div id="history-list"></div>
+    <div class="modal-actions" style="justify-content:space-between">
+      <span style="font-size:11px;color:var(--text-muted)">Saved locally in this browser</span>
+      <button class="cancel" onclick="closeHistoryModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast-container"></div>
 
 <script>
-const S={pdfDoc:null,pdfBytes:null,pdfArrayBuffer:null,currentPage:1,totalPages:0,zoom:1,elements:{},selectedId:null,selectedPage:null,undoStack:[],gridVisible:false,sigTab:'draw',sigFont:'cursive',brushMode:false,brushColor:'#4f8ef7',brushSize:4,brushStrokes:{}};
+const S={pdfDoc:null,pdfBytes:null,pdfArrayBuffer:null,currentPage:1,totalPages:0,zoom:1,elements:{},selectedId:null,selectedPage:null,undoStack:[],gridVisible:false,sigTab:'draw',sigFont:'cursive',brushMode:false,brushColor:'#ffffff',brushSize:4,brushStrokes:{},selectMode:false,selection:{elements:[],strokes:[]}};
 let elemId=0,sigCtx,sigDrawing=false,sigStrokes=[],currentStroke=[];
 let brushCtx,brushDrawing=false,brushCurrentStroke=null;
+let selDragging=false,selStartX=0,selStartY=0;
 
 window.addEventListener('DOMContentLoaded',()=>{
   const lo=document.getElementById('loading-overlay');
@@ -394,6 +446,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   setTimeout(()=>{lo.classList.add('hidden');setTimeout(()=>lo.style.display='none',400);},1000);
   initSigCanvas();
   initBrushCanvas();
+  initSelectionTool();
   initPaste();
   initKeys();
 });
@@ -414,27 +467,30 @@ function lib(){
 function loadPDF(input){
   const file=input.files[0];if(!file)return;
   const r=new FileReader();
-  r.onload=async(e)=>{
-    // Store the original ArrayBuffer — PDF.js may detach/consume it, so we keep a copy
-    S.pdfArrayBuffer=e.target.result.slice(0); // clone
-    S.pdfBytes=new Uint8Array(S.pdfArrayBuffer.slice(0)); // fresh copy for pdf-lib
-    showToast('Loading PDF…','info');
-    try{
-      const l=lib();
-      // Pass yet another copy so PDF.js doesn't detach our stored buffer
-      S.pdfDoc=await l.getDocument({data:new Uint8Array(S.pdfArrayBuffer.slice(0))}).promise;
-      S.totalPages=S.pdfDoc.numPages;S.currentPage=1;S.elements={};S.brushStrokes={};
-      for(let i=1;i<=S.totalPages;i++){S.elements[i]=[];S.brushStrokes[i]=[];}
-      document.getElementById('doc-pages').textContent=S.totalPages;
-      document.getElementById('upload-prompt').style.display='none';
-      document.getElementById('canvas-stack').style.display='inline-block';
-      await renderPage(S.currentPage);
-      await buildThumbs();
-      updateStats();
-      showToast('PDF loaded!','success');
-    }catch(err){showToast('Error: '+err.message,'error');}
-  };
+  r.onload=async(e)=>{await loadPDFFromBuffer(e.target.result);};
   r.readAsArrayBuffer(file);input.value='';
+}
+
+async function loadPDFFromBuffer(arrayBuffer){
+  // Store the original ArrayBuffer — PDF.js may detach/consume it, so we keep a copy
+  S.pdfArrayBuffer=arrayBuffer.slice(0); // clone
+  S.pdfBytes=new Uint8Array(S.pdfArrayBuffer.slice(0)); // fresh copy for pdf-lib
+  showToast('Loading PDF…','info');
+  try{
+    const l=lib();
+    // Pass yet another copy so PDF.js doesn't detach our stored buffer
+    S.pdfDoc=await l.getDocument({data:new Uint8Array(S.pdfArrayBuffer.slice(0))}).promise;
+    S.totalPages=S.pdfDoc.numPages;S.currentPage=1;S.elements={};S.brushStrokes={};
+    for(let i=1;i<=S.totalPages;i++){S.elements[i]=[];S.brushStrokes[i]=[];}
+    document.getElementById('doc-pages').textContent=S.totalPages;
+    document.getElementById('upload-prompt').style.display='none';
+    document.getElementById('canvas-stack').style.display='inline-block';
+    await renderPage(S.currentPage);
+    await buildThumbs();
+    updateStats();
+    showToast('PDF loaded!','success');
+    return true;
+  }catch(err){showToast('Error: '+err.message,'error');return false;}
 }
 
 async function renderPage(n){
@@ -496,10 +552,11 @@ function addElement(e){pushUndo();const p=S.currentPage;if(!S.elements[p])S.elem
 
 function renderElements(pn){
   const layer=document.getElementById('elements-layer');layer.innerHTML='';
-  // Respect brush mode: while brushing, the elements layer must NOT capture
-  // pointer events, or it blocks mousedown/move from reaching overlay-canvas.
-  layer.style.pointerEvents=S.brushMode?'none':'auto';
+  // While brushing or rectangle-selecting, the elements layer must NOT capture
+  // pointer events, or it blocks input from reaching overlay-canvas / selection-layer.
+  layer.style.pointerEvents=(S.brushMode||S.selectMode)?'none':'auto';
   (S.elements[pn]||[]).forEach(e=>createNode(e,layer));
+  applySelectionHighlight();
 }
 
 function createNode(e,layer){
@@ -533,7 +590,7 @@ function deselectAll(){S.selectedId=null;S.selectedPage=null;renderElements(S.cu
 document.getElementById('workspace').addEventListener('click',e=>{if(e.target.id==='workspace'||e.target.id==='pdf-canvas')deselectAll();});
 
 function startDrag(ev,e){
-  if(S.brushMode)return;
+  if(S.brushMode||S.selectMode)return;
   ev.preventDefault();selectElement(e.id,S.currentPage);
   const sx=ev.clientX-e.x,sy=ev.clientY-e.y;
   const onMove=mv=>{e.x=mv.clientX-sx;e.y=mv.clientY-sy;const n=document.getElementById('elem-'+e.id);if(n){n.style.left=e.x+'px';n.style.top=e.y+'px';}updatePropPanel(e);};
@@ -713,13 +770,150 @@ function initPaste(){
 function toggleBrushMode(){
   if(!S.pdfDoc){showToast('Upload a PDF first','error');return;}
   S.brushMode=!S.brushMode;
+  if(S.brushMode&&S.selectMode)deactivateSelectMode();
   document.getElementById('brush-tool-btn').classList.toggle('active',S.brushMode);
   document.getElementById('brush-panel').style.display=S.brushMode?'':'none';
   const oc=document.getElementById('overlay-canvas'),layer=document.getElementById('elements-layer');
   oc.style.pointerEvents=S.brushMode?'auto':'none';
   oc.style.cursor=S.brushMode?'crosshair':'default';
-  layer.style.pointerEvents=S.brushMode?'none':'auto';
+  layer.style.pointerEvents=(S.brushMode||S.selectMode)?'none':'auto';
   if(S.brushMode){deselectAll();showToast('Brush mode on — draw on the page','info');}
+}
+
+function deactivateSelectMode(){
+  S.selectMode=false;
+  document.getElementById('select-tool-btn').classList.remove('active');
+  document.getElementById('selection-panel').style.display='none';
+  document.getElementById('selection-layer').style.pointerEvents='none';
+  clearSelection();
+}
+
+function deactivateBrushMode(){
+  S.brushMode=false;
+  document.getElementById('brush-tool-btn').classList.remove('active');
+  document.getElementById('brush-panel').style.display='none';
+  const oc=document.getElementById('overlay-canvas');
+  oc.style.pointerEvents='none';oc.style.cursor='default';
+}
+
+// RECTANGLE SELECTION TOOL
+function toggleSelectMode(){
+  if(!S.pdfDoc){showToast('Upload a PDF first','error');return;}
+  S.selectMode=!S.selectMode;
+  if(S.selectMode&&S.brushMode)deactivateBrushMode();
+  document.getElementById('select-tool-btn').classList.toggle('active',S.selectMode);
+  document.getElementById('selection-panel').style.display=S.selectMode?'':'none';
+  const sl=document.getElementById('selection-layer'),layer=document.getElementById('elements-layer');
+  sl.style.pointerEvents=S.selectMode?'auto':'none';
+  layer.style.pointerEvents=(S.brushMode||S.selectMode)?'none':'auto';
+  if(!S.selectMode)clearSelection();
+  else{deselectAll();showToast('Select mode on — drag a rectangle to select','info');}
+}
+
+function initSelectionTool(){
+  const sl=document.getElementById('selection-layer');
+  sl.addEventListener('mousedown',e=>{if(!S.selectMode)return;startSelectionDrag(e);});
+  window.addEventListener('mousemove',e=>{if(selDragging)updateSelectionDrag(e);});
+  window.addEventListener('mouseup',()=>{if(selDragging)finishSelectionDrag();});
+}
+
+function startSelectionDrag(ev){
+  const pc=document.getElementById('pdf-canvas').getBoundingClientRect();
+  selDragging=true;selStartX=ev.clientX-pc.left;selStartY=ev.clientY-pc.top;
+  const box=document.getElementById('selection-rect');
+  box.style.left=selStartX+'px';box.style.top=selStartY+'px';box.style.width='0px';box.style.height='0px';box.style.display='block';
+}
+
+function updateSelectionDrag(ev){
+  const pc=document.getElementById('pdf-canvas').getBoundingClientRect();
+  const curX=ev.clientX-pc.left,curY=ev.clientY-pc.top;
+  const x=Math.min(curX,selStartX),y=Math.min(curY,selStartY);
+  const w=Math.abs(curX-selStartX),h=Math.abs(curY-selStartY);
+  const box=document.getElementById('selection-rect');
+  box.style.left=x+'px';box.style.top=y+'px';box.style.width=w+'px';box.style.height=h+'px';
+}
+
+function finishSelectionDrag(){
+  selDragging=false;
+  const box=document.getElementById('selection-rect');
+  const rx0=parseFloat(box.style.left),ry0=parseFloat(box.style.top);
+  const rw=parseFloat(box.style.width),rh=parseFloat(box.style.height);
+  box.style.display='none';
+  if(rw<4&&rh<4){return;} // treat tiny drags as a click-to-clear
+  computeSelection(rx0,ry0,rx0+rw,ry0+rh);
+}
+
+function computeSelection(x0,y0,x1,y1){
+  const pc=document.getElementById('pdf-canvas').getBoundingClientRect();
+  const selEls=[],selStrokeIdx=[];
+  (S.elements[S.currentPage]||[]).forEach(e=>{
+    const node=document.getElementById('elem-'+e.id);if(!node)return;
+    const r=node.getBoundingClientRect();
+    const nx0=r.left-pc.left,ny0=r.top-pc.top,nx1=r.right-pc.left,ny1=r.bottom-pc.top;
+    const intersects=nx0<x1&&nx1>x0&&ny0<y1&&ny1>y0;
+    if(intersects)selEls.push(e.id);
+  });
+  (S.brushStrokes[S.currentPage]||[]).forEach((stroke,idx)=>{
+    const hit=stroke.points.some(p=>p.x>=x0&&p.x<=x1&&p.y>=y0&&p.y<=y1);
+    if(hit)selStrokeIdx.push(idx);
+  });
+  S.selection={elements:selEls,strokes:selStrokeIdx};
+  applySelectionHighlight();
+  updateSelectionPanel();
+}
+
+function applySelectionHighlight(){
+  (S.selection.elements||[]).forEach(id=>{
+    const node=document.getElementById('elem-'+id);
+    if(node){const inner=node.querySelector('.elem-inner');if(inner)inner.classList.add('elem-multiselected');}
+  });
+}
+
+function updateSelectionPanel(){
+  const n=(S.selection.elements||[]).length,m=(S.selection.strokes||[]).length;
+  const label=document.getElementById('sel-count');
+  if(!n&&!m)label.textContent='Drag a rectangle on the page to select elements or brush strokes.';
+  else label.textContent=`${n} element(s) and ${m} brush stroke(s) selected.`;
+}
+
+function clearSelection(){
+  S.selection={elements:[],strokes:[]};
+  document.querySelectorAll('.elem-multiselected').forEach(n=>n.classList.remove('elem-multiselected'));
+  updateSelectionPanel();
+}
+
+function copySelection(){
+  if(!S.selection.elements.length&&!S.selection.strokes.length){showToast('Nothing selected','info');return;}
+  pushUndo();
+  const p=S.currentPage;
+  S.selection.elements.forEach(id=>{
+    const e=(S.elements[p]||[]).find(x=>x.id===id);if(!e)return;
+    const copy=JSON.parse(JSON.stringify(e));copy.id=++elemId;copy.x+=20;copy.y+=20;
+    S.elements[p].push(copy);
+  });
+  S.selection.strokes.forEach(idx=>{
+    const stroke=(S.brushStrokes[p]||[])[idx];if(!stroke)return;
+    const copy=JSON.parse(JSON.stringify(stroke));
+    copy.points.forEach(pt=>{pt.x+=20;pt.y+=20;});
+    S.brushStrokes[p].push(copy);
+  });
+  clearSelection();
+  renderElements(p);drawBrushStrokesOnOverlay();updateStats();
+  showToast('Selection copied','success');
+}
+
+function deleteSelection(){
+  if(!S.selection.elements.length&&!S.selection.strokes.length){showToast('Nothing selected','info');return;}
+  pushUndo();
+  const p=S.currentPage;
+  const elSet=new Set(S.selection.elements);
+  S.elements[p]=(S.elements[p]||[]).filter(e=>!elSet.has(e.id));
+  const strokeSet=new Set(S.selection.strokes);
+  S.brushStrokes[p]=(S.brushStrokes[p]||[]).filter((s,idx)=>!strokeSet.has(idx));
+  if(S.selectedId&&elSet.has(S.selectedId))S.selectedId=null;
+  clearSelection();
+  renderElements(p);drawBrushStrokesOnOverlay();updateStats();
+  showToast('Selection deleted','success');
 }
 
 function initBrushCanvas(){
@@ -812,18 +1006,26 @@ function undoAction(){
   if(!S.undoStack.length){showToast('Nothing to undo','info');return;}
   const snap=S.undoStack.pop();
   S.elements=snap.elements;S.brushStrokes=snap.brush;
-  deselectAll();drawBrushStrokesOnOverlay();updateStats();showToast('Undone','info');
+  clearSelection();deselectAll();drawBrushStrokesOnOverlay();updateStats();showToast('Undone','info');
 }
 
 function initKeys(){
   document.addEventListener('keydown',e=>{
     if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
     if((e.metaKey||e.ctrlKey)&&e.key==='z'){e.preventDefault();undoAction();}
-    if(e.key==='Delete'||e.key==='Backspace')deleteSelected();
-    if((e.metaKey||e.ctrlKey)&&e.key==='d'){e.preventDefault();duplicateSelected();}
+    if((e.metaKey||e.ctrlKey)&&e.key==='s'){e.preventDefault();saveSnapshot();}
+    if(e.key==='Delete'||e.key==='Backspace'){
+      if(S.selectMode&&(S.selection.elements.length||S.selection.strokes.length))deleteSelection();
+      else deleteSelected();
+    }
+    if((e.metaKey||e.ctrlKey)&&e.key==='d'){
+      e.preventDefault();
+      if(S.selectMode&&(S.selection.elements.length||S.selection.strokes.length))copySelection();
+      else duplicateSelected();
+    }
     if(e.key==='ArrowLeft')prevPage();if(e.key==='ArrowRight')nextPage();
     if(e.key==='+'||e.key==='=')changeZoom(0.1);if(e.key==='-')changeZoom(-0.1);
-    if(e.key==='Escape')deselectAll();
+    if(e.key==='Escape'){deselectAll();clearSelection();}
   });
 }
 
@@ -943,6 +1145,113 @@ async function exportPDF(){
   }finally{
     btn.innerHTML=origHTML;btn.disabled=false;
   }
+}
+
+// SAVE & HISTORY (persisted locally in the browser)
+const HISTORY_KEY='noahsign_history';
+const DOC_KEY='noahsign_doc';
+
+function arrayBufferToBase64(buf){
+  const bytes=new Uint8Array(buf);let binary='';const chunk=0x8000;
+  for(let i=0;i<bytes.length;i+=chunk){binary+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));}
+  return btoa(binary);
+}
+function base64ToArrayBuffer(b64){
+  const binary=atob(b64);const len=binary.length;const bytes=new Uint8Array(len);
+  for(let i=0;i<len;i++)bytes[i]=binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+function saveSnapshot(){
+  if(!S.pdfDoc){showToast('Upload a PDF first','error');return;}
+  try{
+    const docPayload={pdfBase64:arrayBufferToBase64(S.pdfArrayBuffer),totalPages:S.totalPages,ts:Date.now()};
+    localStorage.setItem(DOC_KEY,JSON.stringify(docPayload));
+    const hist=JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');
+    hist.push({
+      id:Date.now()+'-'+Math.random().toString(36).slice(2,7),
+      ts:Date.now(),
+      elements:S.elements,
+      brushStrokes:S.brushStrokes,
+      zoom:S.zoom,
+      pageCount:S.totalPages,
+      elementCount:Object.values(S.elements).reduce((t,a)=>t+a.length,0),
+      strokeCount:Object.values(S.brushStrokes).reduce((t,a)=>t+a.length,0)
+    });
+    while(hist.length>20)hist.shift();
+    localStorage.setItem(HISTORY_KEY,JSON.stringify(hist));
+    showToast('Saved — '+hist.length+' version(s) in history','success');
+    renderHistoryList();
+  }catch(err){
+    showToast('Save failed (storage full?): '+err.message,'error');
+  }
+}
+
+function openHistoryModal(){
+  renderHistoryList();
+  document.getElementById('history-modal').classList.add('open');
+}
+function closeHistoryModal(){document.getElementById('history-modal').classList.remove('open');}
+
+function renderHistoryList(){
+  const list=document.getElementById('history-list');
+  let hist=[];
+  try{hist=JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');}catch{hist=[];}
+  if(!hist.length){
+    list.innerHTML='<div class="history-empty">No saved versions yet. Click <strong>Save</strong> in the top bar to create one.</div>';
+    return;
+  }
+  list.innerHTML='';
+  hist.slice().reverse().forEach(entry=>{
+    const row=document.createElement('div');row.className='history-row';
+    const info=document.createElement('div');info.className='hr-info';
+    const time=document.createElement('div');time.className='hr-time';time.textContent=new Date(entry.ts).toLocaleString();
+    const meta=document.createElement('div');meta.className='hr-meta';meta.textContent=`${entry.pageCount||'?'} page(s) · ${entry.elementCount||0} element(s) · ${entry.strokeCount||0} stroke(s)`;
+    info.appendChild(time);info.appendChild(meta);
+    const actions=document.createElement('div');actions.className='btn-row';
+    const restoreBtn=document.createElement('button');restoreBtn.className='btn-sm';restoreBtn.textContent='Restore';restoreBtn.onclick=()=>restoreSnapshot(entry.id);
+    const delBtn=document.createElement('button');delBtn.className='btn-sm danger';delBtn.textContent='Delete';delBtn.onclick=()=>deleteSnapshotEntry(entry.id);
+    actions.appendChild(restoreBtn);actions.appendChild(delBtn);
+    row.appendChild(info);row.appendChild(actions);
+    list.appendChild(row);
+  });
+}
+
+async function restoreSnapshot(id){
+  let hist=[];
+  try{hist=JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');}catch{hist=[];}
+  const entry=hist.find(h=>h.id===id);
+  if(!entry){showToast('Version not found','error');return;}
+
+  if(!S.pdfDoc){
+    let docPayload=null;
+    try{docPayload=JSON.parse(localStorage.getItem(DOC_KEY)||'null');}catch{docPayload=null;}
+    if(!docPayload){showToast('No saved document found — upload the PDF first','error');return;}
+    const ok=await loadPDFFromBuffer(base64ToArrayBuffer(docPayload.pdfBase64));
+    if(!ok)return;
+  }
+
+  pushUndo();
+  S.elements=JSON.parse(JSON.stringify(entry.elements||{}));
+  S.brushStrokes=JSON.parse(JSON.stringify(entry.brushStrokes||{}));
+  for(let i=1;i<=S.totalPages;i++){
+    if(!S.elements[i])S.elements[i]=[];
+    if(!S.brushStrokes[i])S.brushStrokes[i]=[];
+  }
+  clearSelection();deselectAll();
+  renderPage(S.currentPage);
+  updateStats();
+  closeHistoryModal();
+  showToast('Restored version from '+new Date(entry.ts).toLocaleString(),'success');
+}
+
+function deleteSnapshotEntry(id){
+  let hist=[];
+  try{hist=JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');}catch{hist=[];}
+  hist=hist.filter(h=>h.id!==id);
+  localStorage.setItem(HISTORY_KEY,JSON.stringify(hist));
+  renderHistoryList();
+  showToast('Version deleted','info');
 }
 
 function showToast(msg,type='info'){
